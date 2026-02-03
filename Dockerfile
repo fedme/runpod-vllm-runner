@@ -1,5 +1,8 @@
 FROM vllm/vllm-openai:v0.15.0
 
+# Upgrade transformers (MedGemma 1.5 needs 4.50+) and install timm for vision backbone
+RUN pip install --no-cache-dir --upgrade transformers "timm>=1.0.17"
+
 # Install additional dependencies for RunPod worker
 COPY builder/requirements.txt /requirements.txt
 RUN pip install --no-cache-dir -r /requirements.txt
@@ -23,6 +26,7 @@ ENV MODEL_NAME=$MODEL_NAME \
     TOKENIZER_REVISION=$TOKENIZER_REVISION \
     QUANTIZATION=$QUANTIZATION \
     BASE_PATH=$BASE_PATH \
+    DTYPE=bfloat16 \
     HF_HOME="${BASE_PATH}/huggingface-cache/hub" \
     HF_HUB_ENABLE_HF_TRANSFER=1
 

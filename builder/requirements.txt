@@ -1,4 +1,4 @@
 runpod>=1.8,<2.0
 python-dotenv
-huggingface-hub
+huggingface-hub>=0.25.0
 hf-transfer
