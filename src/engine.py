@@ -18,12 +18,14 @@ try:
     from vllm.entrypoints.openai.engine.protocol import ErrorResponse
     from vllm.entrypoints.openai.models.serving import OpenAIServingModels
     from vllm.entrypoints.openai.models.protocol import BaseModelPath, LoRAModulePath
+    VLLM_VERSION = "0.15+"
 except ImportError:
-    # vLLM 0.12-0.14 (flat structure)
+    # vLLM 0.8-0.14 (flat structure)
     from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
     from vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
     from vllm.entrypoints.openai.protocol import ChatCompletionRequest, CompletionRequest, ErrorResponse
     from vllm.entrypoints.openai.serving_models import BaseModelPath, LoRAModulePath, OpenAIServingModels
+    VLLM_VERSION = "0.8-0.14"
 
 from utils import DummyRequest, JobInput, BatchSize, create_error_response
 from constants import DEFAULT_MAX_CONCURRENCY, DEFAULT_BATCH_SIZE, DEFAULT_BATCH_SIZE_GROWTH_FACTOR, DEFAULT_MIN_BATCH_SIZE
@@ -216,35 +218,67 @@ class OpenAIvLLMEngine(vLLMEngine):
             BaseModelPath(name=self.engine_args.model, model_path=self.engine_args.model)
         ]
 
-        self.serving_models = OpenAIServingModels(
-            engine_client=self.llm,
-            base_model_paths=self.base_model_paths,
-            lora_modules=self.lora_adapters,
-        )
-        await self.serving_models.init_static_loras()
+        # Get model_config from engine (needed for vLLM 0.8-0.14)
+        model_config = await self.llm.get_model_config() if VLLM_VERSION == "0.8-0.14" else None
 
         # Get chat template from vLLM tokenizer if available
         chat_template = None
         if self.tokenizer and hasattr(self.tokenizer, 'tokenizer'):
             chat_template = self.tokenizer.tokenizer.chat_template
 
-        self.chat_engine = OpenAIServingChat(
-            engine_client=self.llm,
-            models=self.serving_models,
-            response_role=self.response_role,
-            request_logger=None,
-            chat_template=chat_template,
-            chat_template_content_format="auto",
-            reasoning_parser=os.getenv('REASONING_PARSER', ""),
-            enable_auto_tools=os.getenv('ENABLE_AUTO_TOOL_CHOICE', 'false').lower() == 'true',
-            tool_parser=os.getenv('TOOL_CALL_PARSER', "") or None,
-            enable_prompt_tokens_details=False,
-        )
-        self.completion_engine = OpenAIServingCompletion(
-            engine_client=self.llm,
-            models=self.serving_models,
-            request_logger=None,
-        )
+        if VLLM_VERSION == "0.15+":
+            self.serving_models = OpenAIServingModels(
+                engine_client=self.llm,
+                base_model_paths=self.base_model_paths,
+                lora_modules=self.lora_adapters,
+            )
+            await self.serving_models.init_static_loras()
+
+            self.chat_engine = OpenAIServingChat(
+                engine_client=self.llm,
+                models=self.serving_models,
+                response_role=self.response_role,
+                request_logger=None,
+                chat_template=chat_template,
+                chat_template_content_format="auto",
+                reasoning_parser=os.getenv('REASONING_PARSER', ""),
+                enable_auto_tools=os.getenv('ENABLE_AUTO_TOOL_CHOICE', 'false').lower() == 'true',
+                tool_parser=os.getenv('TOOL_CALL_PARSER', "") or None,
+                enable_prompt_tokens_details=False,
+            )
+            self.completion_engine = OpenAIServingCompletion(
+                engine_client=self.llm,
+                models=self.serving_models,
+                request_logger=None,
+            )
+        else:
+            self.serving_models = OpenAIServingModels(
+                engine_client=self.llm,
+                model_config=model_config,
+                base_model_paths=self.base_model_paths,
+                lora_modules=self.lora_adapters,
+            )
+            await self.serving_models.init_static_loras()
+
+            self.chat_engine = OpenAIServingChat(
+                engine_client=self.llm,
+                model_config=model_config,
+                models=self.serving_models,
+                response_role=self.response_role,
+                request_logger=None,
+                chat_template=chat_template,
+                chat_template_content_format="auto",
+                reasoning_parser=os.getenv('REASONING_PARSER', None),
+                enable_auto_tools=os.getenv('ENABLE_AUTO_TOOL_CHOICE', 'false').lower() == 'true',
+                tool_parser=os.getenv('TOOL_CALL_PARSER', "") or None,
+                enable_prompt_tokens_details=False,
+            )
+            self.completion_engine = OpenAIServingCompletion(
+                engine_client=self.llm,
+                model_config=model_config,
+                models=self.serving_models,
+                request_logger=None,
+            )
     
     async def generate(self, openai_request: JobInput):
         if openai_request.openai_route == "/v1/models":

@@ -1,4 +1,4 @@
-FROM vllm/vllm-openai:v0.15.0
+FROM vllm/vllm-openai:v0.8.5
 
 # Upgrade transformers (MedGemma 1.5 needs 4.50+) and install timm for vision backbone
 RUN pip install --no-cache-dir --upgrade transformers "timm>=1.0.17"
