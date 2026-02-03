@@ -13,7 +13,13 @@ try:
         from vllm.entrypoints.openai.protocol import ErrorResponse
 except ImportError:
     logging.warning("Error importing vllm, skipping related imports. This is ONLY expected when baking model into docker image from a machine without GPUs")
-    pass
+
+    # Provide a fallback ErrorResponse so create_error_response can still be defined
+    from pydantic import BaseModel
+    class ErrorResponse(BaseModel):
+        message: str
+        type: str
+        code: int
 
 logging.basicConfig(level=logging.INFO)
 
