@@ -38,4 +38,6 @@ RUN --mount=type=secret,id=HF_TOKEN,required=false \
     python3 /src/download_model.py; \
     fi
 
+# Reset the vLLM base image entrypoint so we can run our own handler
+ENTRYPOINT []
 CMD ["python3", "/src/handler.py"]
